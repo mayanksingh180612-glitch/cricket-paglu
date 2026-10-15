@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mayank Cricket League</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#07130f;color:white;font-family:Arial,sans-serif;
+  min-height:100vh;display:flex;justify-content:center;align-items:center;
+  padding:15px
+}
+.game{width:100%;max-width:950px}
+header{display:flex;justify-content:space-between;align-items:center;
+padding:15px 0;gap:10px;flex-wrap:wrap}
+h1{font-size:clamp(23px,4vw,36px);color:#a6ff70}
+h1 span{color:white}
+.tag{color:#b7d5c2;font-size:12px;margin-top:5px}
+.scoreboard{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{background:#13291f;border:1px solid #284b36;border-radius:12px;
+padding:12px;text-align:center}
+.stat small{color:#a7c4b0;font-size:11px}
+.stat strong{display:block;font-size:clamp(19px,4vw,28px);margin-top:5px}
+canvas{width:100%;display:block;border-radius:15px;
+border:2px solid #31573e;background:#287f3d;touch-action:manipulation}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:13px}
+button{border:0;border-radius:11px;padding:14px 18px;font-size:15px;
+font-weight:bold;cursor:pointer;transition:transform .12s,filter .12s}
+button:active{transform:scale(.96)}
+#hit{flex:1;min-width:160px;background:#a6ff70;color:#102518}
+#restart{background:#203c2d;color:white;border:1px solid #476a50}
+#start{background:#f3c65d;color:#302309}
+.hint{color:#adc8b7;font-size:12px;line-height:1.7;margin-top:12px;text-align:center}
+#message{text-align:center;font-size:17px;font-weight:bold;min-height:28px;
+padding-top:10px;color:#e8ffda}
+@media(max-width:500px){
+ .stat{padding:9px 3px}.controls button{padding:13px 10px}
+}
+</style>
+</head>
+<body>
+<div class="game">
+<header>
+ <div>
+  <h1>🏏 MAYANK <span>CRICKET</span></h1>
+  <p class="tag">TAP • TIME YOUR SHOT • HIT BIG!</p>
+ </div>
+ <button id="start">▶ START MATCH</button>
+</header>
+
+<div class="scoreboard">
+ <div class="stat"><small>RUNS</small><strong id="runs">0</strong></div>
+ <div class="stat"><small>WICKETS</small><strong id="wickets">0/3</strong></div>
+ <div class="stat"><small>OVERS</small><strong id="overs">0.0</strong></div>
+ <div class="stat"><small>LAST BALL</small><strong id="last">—</strong></div>
+</div>
+
+<canvas id="field" width="900" height="510"></canvas>
+<div id="message">Press START MATCH to begin!</div>
+
+<div class="controls">
+ <button id="hit">🏏 HIT SHOT</button>
+ <button id="restart">↻ RESTART</button>
+</div>
+<p class="hint">
+ Computer: press SPACE or click HIT SHOT when the ball comes close.<br>
+ Mobile: tap HIT SHOT at the right time. Time your shot for boundaries!
+</p>
+</div>
+
+<script>
+const canvas=document.getElementById('field');
+const ctx=canvas.getContext('2d');
+const $=id=>document.getElementById(id);
+
+let running=false, runs=0, wickets=0, balls=0;
+let ball=null, lastResult='—', message='Press START MATCH to begin!';
+let swing=0, particles=[], clock=0, lastTime=0, raf=0;
+let crowd=[], stars=[];
+for(let i=0;i<110;i++){
+ crowd.push({x:Math.random()*900,y:35+Math.random()*100,
+ color:['#d6e6b0','#e9b96e','#a6d5e9','#edaaaa'][i%4]});
+}
+function reset(){
+ cancelAnimationFrame(raf);
+ running=false;runs=0;wickets=0;balls=0;ball=null;swing=0;
+ particles=[];lastResult='—';message='Press START MATCH to begin!';
+ update();draw();
+}
+function start(){
+ if(running)return;
+ if(wickets>=3 || balls>=18){reset();}
+ running=true;
+ message='Watch the ball... time your shot!';
+ $('start').textContent='🏏 MATCH ON';
+ spawnBall();
+ lastTime=performance.now();
+ cancelAnimationFrame(raf);
+ raf=requestAnimationFrame(loop);
+}
+function spawnBall(){
+ if(!running)return;
+ ball={x:455,y:255,z:0,progress:0,speed:0.43+Math.random()*0.12,
+ targetY:305,hit:false,trail:[]};
+}
+function update(){
+ $('runs').textContent=runs;
+ $('wickets').textContent=wickets+'/3';
+ $('overs').textContent=Math.floor(balls/6)+'.'+(balls%6);
+ $('last').textContent=lastResult;
+ $('message').textContent=message;
+}
+function hit(){
+ if(!running||!ball||ball.hit)return;
+ const p=ball.progress;
+ if(p<0.42){
+   message='Too early! Watch the ball carefully.';
+   update();return;
+ }
+ if(p>0.97){
+   message='Too late! The ball has passed.';
+   update();return;
+ }
+ ball.hit=true;
+ swing=1;
+ // The closer to the ideal timing, the better the shot.
+ const quality=1-Math.min(1,Math.abs(p-0.76)/0.24);
+ const chance=Math.random();
+ let result;
+ if(quality>0.78 && chance<0.78) result=chance<0.48?6:4;
+ else if(quality>0.50 && chance<0.78) result=chance<0.4?4:2;
+ else if(quality>0.27 && chance<0.72) result=chance<0.45?2:1;
+ else if(chance<0.45) result=1;
+ else result=0;
+ runs+=result;
+ balls++;
+ lastResult=result===0?'DOT':result;
+ if(result===6)message='🚀 SIX! Massive hit!';
+ else if(result===4)message='🔥 FOUR! Beautiful boundary!';
+ else if(result===0)message='Dot ball! Try better timing.';
+ else message='Nice shot! '+result+' run'+(result>1?'s':'')+'!';
+ const angle=-Math.PI/2+(Math.random()-0.5)*1.3;
+ for(let i=0;i<(result>=4?35:12);i++){
+   particles.push({x:ball.x,y:ball.y,vx:Math.cos(angle)*(2+Math.random()*7),
+   vy:Math.sin(angle)*(2+Math.random()*6),life:1,color:result>=4?'#ffe36b':'#fff'});
+ }
+ ball.flight={x:ball.x,y:ball.y,vx:Math.cos(angle)*(3+result*.8),
+ vy:Math.sin(angle)*(3+result*.8),life:1};
+ update();
+}
+function loop(now){
+ if(!running)return;
+ const dt=Math.min((now-lastTime)/1000,0.035);
+ lastTime=now;clock+=dt;
+ if(ball&&!ball.hit){
+   ball.progress+=ball.speed*dt;
+   const p=ball.progress;
+   ball.x=455+(710-455)*p;
+   ball.y=255+(305-255)*p;
+   ball.z=Math.sin(p*Math.PI)*18;
+   ball.trail.push({x:ball.x,y:ball.y-ball.z});
+   if(ball.trail.length>8)ball.trail.shift();
+   if(p>=1){
+     balls++;wickets++;
+     lastResult='W';
+     message=wickets>=3?'OUT! Innings over. Press RESTART.':'Bowled! Next batter coming in.';
+     ball=null;
+     if(wickets>=3||balls>=18){
+       running=false;$('start').textContent='▶ PLAY AGAIN';
+     }else{
+       setTimeout(()=>{if(running&&!ball)spawnBall()},600);
+     }
+     update();
+   }
+ }
+ if(ball&&ball.hit&&ball.flight){
+   let f=ball.flight;
+   f.x+=f.vx;f.y+=f.vy;f.vy+=0.13;f.life-=dt*0.48;
+   ball.x=f.x;ball.y=f.y;
+   if(f.life<=0){
+     ball=null;
+     if(running){
+       if(wickets>=3||balls>=18){
+         running=false;$('start').textContent='▶ PLAY AGAIN';
+         message='Innings complete! Final score: '+runs;
+       }else spawnBall();
+     }
+   }
+ }
+ particles=particles.filter(p=>p.life>0);
+ particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life-=dt*1.4});
+ swing=Math.max(0,swing-dt*4);
+ draw();
+ raf=requestAnimationFrame(loop);
+}
+function draw(){
+ const w=900,h=510;
+ ctx.clearRect(0,0,w,h);
+ // Stadium sky
+ let sky=ctx.createLinearGradient(0,0,0,170);
+ sky.addColorStop(0,'#112d40');sky.addColorStop(1,'#558b86');
+ ctx.fillStyle=sky;ctx.fillRect(0,0,w,170);
+ // Floodlights
+ for(const x of [75,825]){
+   ctx.fillStyle='#a8b9b0';ctx.fillRect(x-3,20,6,95);
+   ctx.fillStyle='#fff4c0';
+   for(let i=0;i<5;i++)for(let j=0;j<3;j++)
+     ctx.fillRect(x-17+j*12,17+i*5,6,3);
+ }
+ // Stadium seating
+ ctx.fillStyle='#253f48';ctx.fillRect(0,80,w,90);
+ crowd.forEach(c=>{
+   ctx.fillStyle=c.color;ctx.fillRect(c.x,c.y,4,5);
+ });
+ ctx.fillStyle='#152c2b';ctx.fillRect(0,145,w,30);
+ ctx.fillStyle='#7ca85c';ctx.fillRect(0,175,w,335);
+ // Outfield rings
+ ctx.strokeStyle='rgba(220,255,190,.17)';ctx.lineWidth=2;
+ ctx.beginPath();ctx.ellipse(450,410,370,225,0,Math.PI,Math.PI*2);ctx.stroke();
+ ctx.beginPath();ctx.ellipse(450,410,300,175,0,Math.PI,Math.PI*2);ctx.stroke();
+ // Grass stripes
+ for(let i=0;i<9;i++){
+   ctx.fillStyle=i%2?'rgba(255,255,255,.025)':'rgba(0,0,0,.035)';
+   ctx.fillRect(i*110,175,55,335);
+ }
+ // Pitch
+ ctx.fillStyle='#bca780';
+ ctx.beginPath();ctx.moveTo(340,235);ctx.lineTo(560,235);
+ ctx.lineTo(590,440);ctx.lineTo(310,440);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#d4bd95';
+ ctx.beginPath();ctx.moveTo(365,245);ctx.lineTo(535,245);
+ ctx.lineTo(550,425);ctx.lineTo(350,425);ctx.closePath();ctx.fill();
+ // Pitch marks
+ ctx.strokeStyle='#fff3d6';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(380,295);ctx.lineTo(520,295);
+ ctx.moveTo(350,407);ctx.lineTo(550,407);ctx.stroke();
+ // Creases and wickets
+ drawStumps(440,294);drawStumps(440,405);
+ // Fielder
+ drawPerson(270,320,'#f5d36c',0.8);
+ drawPerson(655,340,'#f5d36c',0.8);
+ drawPerson(195,420,'#f5d36c',0.8);
+ // Bowler
+ drawPerson(455,250,'#f2d15d',0.88);
+ // Batter
+ drawPerson(455,335,'#dbe6ed',1.05);
+ // Bat in batter's hand
+ ctx.save();
+ ctx.translate(466,328);
+ ctx.rotate(-0.55-swing*1.9);
+ ctx.fillStyle='#e5c18a';
+ ctx.fillRect(-4,-4,9,23);
+ ctx.fillStyle='#f3f0df';
+ ctx.fillRect(-8,12,17,50);
+ ctx.fillStyle='#bd8950';
+ ctx.fillRect(-8,12,17,7);
+ ctx.restore();
+ // Ball trail and ball
+ if(ball&&!ball.hit){
+   ball.trail.forEach((t,i)=>{
+     ctx.globalAlpha=(i+1)/ball.trail.length*.32;
+     ctx.fillStyle='#ff635b';ctx.beginPath();
+     ctx.arc(t.x,t.y,2+i*.22,0,Math.PI*2);ctx.fill();
+   });
+   ctx.globalAlpha=1;
+ }
+ if(ball){
+   ctx.fillStyle='#402820';ctx.beginPath();
+   ctx.ellipse(ball.x,ball.y+4,9,4,0,0,Math.PI*2);ctx.fill();
+   ctx.fillStyle='#e83e4b';ctx.beginPath();
+   ctx.arc(ball.x,ball.y-ball.z,ball.hit?7:6,0,Math.PI*2);ctx.fill();
+   ctx.strokeStyle='#fff';ctx.lineWidth=1;
+   ctx.beginPath();ctx.arc(ball.x,ball.y-ball.z,3,-1,1);ctx.stroke();
+ }
+ // Particle effects
+ particles.forEach(p=>{
+   ctx.globalAlpha=Math.max(0,p.life);
+   ctx.fillStyle=p.color;ctx.beginPath();
+   ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();
+ });
+ ctx.globalAlpha=1;
+ // Ground label
+ ctx.fillStyle='rgba(5,22,14,.72)';
+ roundRect(15,15,205,44,9);ctx.fill();
+ ctx.fillStyle='#b8ff85';ctx.font='bold 17px Arial';
+ ctx.fillText('MAYANK CRICKET',28,34);
+ ctx.fillStyle='#ffffff';ctx.font='11px Arial';
+ ctx.fillText('T20 CHALLENGE',28,49);
+ if(!running){
+   ctx.fillStyle='rgba(3,15,9,.53)';ctx.fillRect(0,0,w,h);
+   ctx.textAlign='center';
+   ctx.fillStyle='#b8ff85';ctx.font='bold 36px Arial';
+   ctx.fillText(wickets>=3||balls>=18?'INNINGS OVER':'READY TO PLAY',450,220);
+   ctx.fillStyle='white';ctx.font='18px Arial';
+   ctx.fillText(wickets>=3||balls>=18?'Final Score: '+runs+' runs':'Start the match and hit a SIX!',450,255);
+   ctx.font='14px Arial';ctx.fillStyle='#d4e6d7';
+   ctx.fillText('SPACE / TAP TO SWING',450,285);
+   ctx.textAlign='left';
+ }
+}
+function roundRect(x,y,w,h,r){
+ ctx.beginPath();ctx.roundRect(x,y,w,h,r);
+ ctx.fill();
+}
+function drawStumps(x,y){
+ ctx.fillStyle='#f8e6bc';
+ for(let i=0;i<3;i++){
+   ctx.fillRect(x+i*8,y-13,4,28);
+ }
+ ctx.fillRect(x-2,y-15,25,3);
+}
+function drawPerson(x,y,color,s){
+ ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+ // shadow
+ ctx.fillStyle='rgba(0,0,0,.2)';
+ ctx.beginPath();ctx.ellipse(0,15,13,4,0,0,Math.PI*2);ctx.fill();
+ // legs
+ ctx.strokeStyle='#182b28';ctx.lineWidth=6;ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(-4,2);ctx.lineTo(-6,15);
+ ctx.moveTo(4,2);ctx.lineTo(7,15);ctx.stroke();
+ // body
+ ctx.fillStyle=color;
+ ctx.beginPath();ctx.roundRect(-9,-18,18,23,5);ctx.fill();
+ // arms
+ ctx.strokeStyle=color;ctx.lineWidth=6;
+ ctx.beginPath();ctx.moveTo(-7,-13);ctx.lineTo(-13,-2);
+ ctx.moveTo(7,-13);ctx.lineTo(12,-5);ctx.stroke();
+ // head
+ ctx.fillStyle='#bd8968';ctx.beginPath();
+ ctx.arc(0,-25,8,0,Math.PI*2);ctx.fill();
+ // helmet
+ ctx.fillStyle='#243e34';ctx.beginPath();
+ ctx.arc(0,-27,8,Math.PI,Math.PI*2);ctx.fill();
+ ctx.restore();
+}
+$('start').addEventListener('click',start);
+$('restart').addEventListener('click',()=>{
+ reset();start();
+});
+$('hit').addEventListener('click',hit);
+document.addEventListener('keydown',e=>{
+ if(e.code==='Space'){
+   e.preventDefault();
+   if(!running)start();else hit();
+ }
+});
+reset();
+</script>
+</body>
+</html>
